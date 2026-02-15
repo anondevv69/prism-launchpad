@@ -1,0 +1,9 @@
+{
+  "name": "prism-launchpad",
+  "version": "1.0.0",
+  "description": "Clawnch + ClawnchMarketCap + BaseScan — GET /latest for gateway",
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": { "start": "node src/index.js" },
+  "engines": { "node": ">=18" }
+}
