@@ -132,35 +132,44 @@ let cached = null;
 let cacheTs = 0;
 
 const server = http.createServer(async (req, res) => {
-  const url = new URL(req.url || '/', `http://localhost:${PORT}`);
-  const path = url.pathname.replace(/\/+$/, '') || '/';
-  if (path === '/' && req.method === 'GET') {
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ status: 'ok', service: 'prism-launchpad', endpoint: '/latest', query: '?fresh=1 to bypass cache' }));
-    return;
-  }
-  if (path === '/latest' && req.method === 'GET') {
-    const fresh = url.searchParams.get('fresh') === '1' || url.searchParams.get('nocache') === '1';
-    const now = Date.now();
-    if (!fresh && cached && now - cacheTs < CACHE_MS) {
+  try {
+    const url = new URL(req.url || '/', `http://localhost:${PORT}`);
+    const path = url.pathname.replace(/\/+$/, '') || '/';
+    if (path === '/' && req.method === 'GET') {
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify(cached));
+      res.end(JSON.stringify({ status: 'ok', service: 'prism-launchpad', endpoint: '/latest', query: '?fresh=1 to bypass cache' }));
       return;
     }
-    try {
-      cached = await run();
-      cacheTs = Date.now();
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify(cached));
-    } catch (e) {
-      console.error(e);
-      res.writeHead(503, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'run_failed', message: e?.message }));
+    if (path === '/latest' && req.method === 'GET') {
+      const fresh = url.searchParams.get('fresh') === '1' || url.searchParams.get('nocache') === '1';
+      const now = Date.now();
+      if (!fresh && cached && now - cacheTs < CACHE_MS) {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(cached));
+        return;
+      }
+      try {
+        cached = await run();
+        cacheTs = Date.now();
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(cached));
+      } catch (e) {
+        console.error('run() error:', e?.message ?? e);
+        res.writeHead(503, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'run_failed', message: e?.message ?? 'run failed' }));
+      }
+      return;
     }
-    return;
+    res.writeHead(404, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'not_found' }));
+  } catch (err) {
+    console.error('Request error:', err?.message ?? err);
+    try {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'internal_error', message: err?.message ?? 'internal error' }));
+    } catch (_) {}
   }
-  res.writeHead(404, { 'Content-Type': 'application/json' });
-  res.end(JSON.stringify({ error: 'not_found' }));
 });
 
-server.listen(PORT, () => console.log('prism-launchpad listening on', PORT));
+// Bind to 0.0.0.0 so Railway can reach the service
+server.listen(PORT, '0.0.0.0', () => console.log('prism-launchpad listening on', PORT));
